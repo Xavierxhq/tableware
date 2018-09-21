@@ -8,11 +8,15 @@ from utils.transforms import TestTransform
 import re
 import shutil
 import pickle
+from collections import OrderedDict
+import json
+import xlwt
+import time
 
 
 pretrained_model = 'model/resnet50-19c8e357.pth'
 base_model,  optim_policy = get_baseline_model(model_path=pretrained_model)
-model_parameter = torch.load('model/pytorch-ckpt/model_best.pth.tar')
+model_parameter = torch.load('model/pytorch-ckpt/best_checkpoint_ep2.pth.tar')
 base_model.load_state_dict(model_parameter['state_dict'])
 
 
@@ -48,6 +52,8 @@ def get_dis(img_path_1, img_path_2, base_model):
 
 
 def get_feature_map(base_model, lst, sample_num_each_cls=5, test_file_dir='datas/test_chawdoe/sample_data_5'):
+    if os.path.exists('feature_map_'+str(len(lst)) + '_' + str(sample_num_each_cls)):
+        return None
     feature_map = dict()
     # lst is a list which includes class index as int array.
 
@@ -124,6 +130,7 @@ def evaluate_single_file(file_path, feature_map, base_model):
             result_dict[k] = float(str(i))
 
     my_map = sorted(result_dict.items(), key=lambda d: d[1])
+
     new_map = dict()
     for i in range(len(my_map)):
         new_map[str(my_map[i][0])] = i
@@ -134,18 +141,24 @@ def evaluate_single_file(file_path, feature_map, base_model):
 def t(base_model, lst, sample_num_each_cls = 5, test_dir = 'datas/dishes_dataset/test_std'):  # test
 
     feature_map_name = 'feature_map' + '_' + str(len(lst)) + '_' + str(sample_num_each_cls)
-    feature_dir = r'/home/ubuntu/Program/Tableware/reid_tableware/evaluate_result/feature_map'
+    feature_dir = './'
     f = open(os.path.join(feature_dir, feature_map_name), 'rb')
     feature_map = pickle.load(f)
     f.close()
 
     test_file_name_list = os.listdir(test_dir)
 
-    all_map = dict()
+    rank_map = dict()
     num_map = dict()
     positive_num = dict()
+    first_num = dict()
 
-    import time
+    for i in lst:
+        first_num[str(i)] = dict()
+        for j in lst:
+            first_num[str(i)][str(j)] = 0
+
+
     t1 = time.time()
     j = 0
 
@@ -158,38 +171,45 @@ def t(base_model, lst, sample_num_each_cls = 5, test_dir = 'datas/dishes_dataset
         file_path = os.path.join(test_dir, i)
         cls_idx = re.split('_', file_path)[-1][:-4]
 
-        if int(cls_idx) not in lst:  # ugly code except the class we do not need test
+        if int(cls_idx) not in lst:  # ugly code except the class we do not need in test
             continue
         # print(cls_idx)
         tmp_dict = evaluate_single_file(file_path, feature_map, base_model)
         if tmp_dict[cls_idx] == 0:  # compute the correct num of the class
             positive_num[cls_idx] += 1
-        if cls_idx not in all_map:  # compute the rank
-            all_map[cls_idx] = tmp_dict
+        if cls_idx not in rank_map:  # compute the rank
+            rank_map[cls_idx] = tmp_dict
         else:
             for k in tmp_dict.keys():
-                all_map[cls_idx][k] += tmp_dict[k]
+                rank_map[cls_idx][k] += tmp_dict[k]
+                if tmp_dict[k] == 0:
+                    first_num[cls_idx][k] += 1
+
         num_map[cls_idx] += 1  # compute all test num of the class
         j += 1
-        # if j == 2:  # for quick test.
-        #     break
+
+
     houzhui = str(len(lst)) + '_' + str(sample_num_each_cls)
-    print(houzhui)
+    # print(houzhui)
     t2 = time.time()
     print(t2 - t1)
-
+    print(first_num)
     save_path = "evaluate_result/all_result/"
 
-    f = open(os.path.join(save_path, 'result_map_' + houzhui), 'wb+')
-    pickle.dump(all_map, f)
+    f = open(os.path.join(save_path, 'result_map_' + houzhui), 'wb+')  # average rank
+    pickle.dump(rank_map, f)
     f.close()
 
-    f = open(os.path.join(save_path, 'num_map_' + houzhui), 'wb+')
+    f = open(os.path.join(save_path, 'num_map_' + houzhui), 'wb+')  # evaluate num of each class
     pickle.dump(num_map, f)
     f.close()
 
-    f = open(os.path.join(save_path, 'positive_num_' + houzhui), 'wb+')
+    f = open(os.path.join(save_path, 'positive_num_' + houzhui), 'wb+')  # evaluate
     pickle.dump(positive_num, f)
+    f.close()
+
+    f = open(os.path.join(save_path, 'first_num_' + houzhui), 'wb+')
+    pickle.dump(first_num, f)
     f.close()
 
     rate_dict = dict()
@@ -197,15 +217,15 @@ def t(base_model, lst, sample_num_each_cls = 5, test_dir = 'datas/dishes_dataset
     for k, v in positive_num.items():
         rate_dict[k] = v / (num_map[k] + 1e-12)
     # print(rate_dict)
-    for k, v in all_map.items():
+    for k, v in rank_map.items():
         for cls_idx in v.keys():
-            all_map[k][cls_idx] /= num_map[k]
+            rank_map[k][cls_idx] /= num_map[k]
 
     f = open(os.path.join(save_path, 'all_map_' + houzhui), 'wb+')
-    pickle.dump(all_map, f)
+    pickle.dump(rank_map, f)
     f.close()
 
-    return rate_dict, all_map
+    return rate_dict, rank_map
 
 
 def get_all_feature_map():
@@ -222,38 +242,76 @@ def get_all_feature_map():
             get_feature_map(base_model, j, i, 'datas/test_chawdoe/sample_data_' + str(i))
 
 
-def get_text_result():
+def pickle_read(file_path):
+    try:
+        with open(file_path, 'rb') as f:
+            return pickle.load(f)
+    except:
+        print('pickle read error: not exits {}'.format(file_path))
+        return None
 
 
-    pass
+def get_text_result():  # just for a test temproraly
+    base_dir = './'
+
+    class_num = ['14', '27', '40', '54']  # need to be modified accroding to the classes num.
+    sample_num = ['_5', '_10']  #  5 or 10 samples each class
+    positive_map_str = 'positive_num_'
+    num_map_str = 'num_map_'
+    all_map_str = 'all_map_'
+    for i in class_num:
+        for j in sample_num:
+            positive_map_name = positive_map_str + str(i) + str(j)
+            num_map_name = num_map_str + str(i) + str(j)
+            all_map_name = all_map_str + str(i) + str(j)
+            positive_map_path = os.path.join(base_dir, positive_map_name)
+            num_map_path = os.path.join(base_dir, num_map_name)
+            all_map_path = os.path.join(base_dir, all_map_name)
+            positive_map = pickle_read(positive_map_path)
+            num_map = pickle_read(num_map_path)
+            all_map = pickle_read(all_map_path)
+            result_dict = OrderedDict()
+            write_excel(all_map, 'result_' + str(i) + str(j) + '.xls')
+            for cls in range(55):  # read the class index in order to make the result in order.
+                cls_idx = str(cls)
+                if cls_idx in positive_map:
+                    result_dict[cls_idx] = positive_map[cls_idx] / num_map[cls_idx]
+                    f = open(i + j + '.txt', 'w+')
+                    f.write('accuracy:')
+                    f.write(json.dumps(result_dict, indent=4))
+                    f.write('average rank of each class')
+                    f.write(json.dumps(all_map, indent=4))
+                    f.close()
+
+
+def write_excel(new_all_map, file_name):
+    book = xlwt.Workbook()
+    sheet = book.add_sheet('Sheet1', cell_overwrite_ok=True)
+    row_index = 1
+    col_index = 1
+    for i in range(55):
+        if str(i) in new_all_map.keys():
+            for j in range(55):
+                if str(j) in new_all_map[str(i)]:
+                    sheet.write(row_index, col_index, new_all_map[str(i)][str(j)])
+                    col_index += 1
+            row_index += 1
+            col_index = 1
+    assert file_name[-4:] == '.xls'
+    book.save(file_name)
+
+
+def do_get_feature_and_t():
+    lst = [i for i in range(1, 55)]
+    lst.pop(27)
+    lst2 = [i for i in range(1, 41)]
+    lst2.pop(27)
+    lst_all = [lst, lst2]
+    for i in lst_all:
+        for j in [5, 10]:
+            get_feature_map(base_model, i, j)
+            t(base_model, i, j)  # rate_map records the accuracy, and the all_map records the average rank.
 
 
 if __name__ == '__main__':
-    get_text_result()
-    # import time
-    # t1 = time.time()
-    # pic_path = 'datas/dishes_dataset/test_std/10001_1.png'
-    # get_feature(pic_path, base_model)
-    # t2 = time.time()
-    # print(t2-t1)
-    # lst = [i for i in range(1, 55)]
-    # lst2 = [i for i in range(1, 41)]
-    # lst3 = [i for i in range(41, 55)]
-    # lst4 = []
-    # for i in range(1, 55):
-    #     if i % 2 == 0:
-    #         lst4.append(i)
-    # lst_all = [lst, lst2, lst3, lst4]
-    # for i in lst_all:
-    #     for j in [5, 10]:
-    #         t(base_model, i, j)  # rate_map records the accuracy, and the all_map records the average rank.
-    #
-    # print(rate_dict['27'])
-    # print(rate_dict['51'])
-    # print(all_map['51']['51'])
-    # print(all_map['27']['27'])
-
-    # get_feature_map(base_model, lst, 10)
-
-
-    # feature_map = get_feature_map(base_model, lst, 10, 'datas/test_chawdoe/sample_data_10')
+    do_get_feature_and_t()
