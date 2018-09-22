@@ -91,6 +91,7 @@ def train(model, optimizer, criterion, epoch, print_freq, data_loader):
               .format(epoch, batch_time.sum, losses.mean, param_group[0]['lr']))
     print()
 
+
 def trainer(data_pth, a, b):
     seed = 0
 
@@ -100,7 +101,7 @@ def trainer(data_pth, a, b):
 
     # optimization options
     optim = 'Adam'
-    max_epoch = 1
+    max_epoch = 10
     train_batch = 64
     test_batch = 64
     lr = 0.1
@@ -199,9 +200,12 @@ def trainer(data_pth, a, b):
         if eval_step > 0 and (epoch + 1) % eval_step == 0 or (epoch + 1) == max_epoch:
             acc = evaluator.evaluate(testloader, test_margin)
             is_best = acc > best_acc
+            print('accuracy:{:.1%}'.format(acc))
             if is_best:
                 best_acc = acc
                 best_epoch = epoch + 1
+                print(
+                    'Best accuracy {:.1%}, achieved at epoch {}'.format(best_acc, best_epoch))
 
             if use_gpu:
                 state_dict = model.module.state_dict()

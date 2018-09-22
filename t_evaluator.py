@@ -16,16 +16,16 @@ import time
 
 pretrained_model = 'model/resnet50-19c8e357.pth'
 base_model,  optim_policy = get_baseline_model(model_path=pretrained_model)
-model_parameter = torch.load('model/pytorch-ckpt/best_checkpoint_ep2.pth.tar')
+model_parameter = torch.load('model/pytorch-ckpt/1_test_checkpoint_ep1.pth.tar')
 base_model.load_state_dict(model_parameter['state_dict'])
 
 
 
-def dist(y1, y2):
+def dist(y1, y2):  # ok
     return torch.sqrt(torch.sum(torch.pow(y1 - y2, 2)))
 
 
-def get_proper_input(img_path):
+def get_proper_input(img_path):  # ok
     if not os.path.exists(img_path):
         return None
     pic_data = data_loader.read_image(img_path)
@@ -39,28 +39,30 @@ def get_proper_input(img_path):
     return pic_data
 
 
-def get_feature(img_path, base_model):
+def get_feature(img_path, base_model):  # ok
     x = get_proper_input(img_path)
     y = base_model(x)
     return y
 
 
-def get_dis(img_path_1, img_path_2, base_model):
+def get_dis(img_path_1, img_path_2, base_model):  # ok
     y1 = get_feature(img_path_1, base_model)
     y2 = get_feature(img_path_2, base_model)
     return dist(y1, y2)
 
 
-def get_feature_map(base_model, lst, sample_num_each_cls=5, test_file_dir='datas/test_chawdoe/sample_data_5'):
+def get_feature_map(base_model, lst, sample_num_each_cls=5, test_file_dir='datas/test_chawdoe/sample_data_'):
+    # ok
+
     if os.path.exists('feature_map_'+str(len(lst)) + '_' + str(sample_num_each_cls)):
         return None
     feature_map = dict()
     # lst is a list which includes class index as int array.
-
+    test_file_dir += str(sample_num_each_cls)
     for i in lst:
         cls_idx = str(i)
         feature_map[cls_idx] = list()
-        dir_full_path = os.path.join(test_file_dir, cls_idx)
+        dir_full_path = os.path.join(test_file_dir, cls_idx)  # open the directory in order.
         dir_file_list = os.listdir(dir_full_path)
         for file_name in dir_file_list:
             file_full_path = os.path.join(dir_full_path, file_name)
@@ -74,7 +76,9 @@ def get_feature_map(base_model, lst, sample_num_each_cls=5, test_file_dir='datas
     return feature_map
 
 
-def get_sample_std_file(sample_num_each_cls=5, directory = 'datas/dishes_dataset/test', save_dir_path = 'datas/test_chawdoe/sample_data_5'):
+def get_sample_std_file(sample_num_each_cls=5, directory = 'datas/dishes_dataset/test_std', save_dir_path = 'datas/test_chawdoe/sample_data_'):
+    # half complete
+    save_dir_path += str(sample_num_each_cls)
     file_list = os.listdir(directory)
     sample_list = []
     copy_file_name_list = []
@@ -82,7 +86,6 @@ def get_sample_std_file(sample_num_each_cls=5, directory = 'datas/dishes_dataset
     for i in file_list:
         line_list = re.split('_', i)
         class_index = line_list[-1][:-4]
-        class_index = str(int(class_index) + 40)
         if class_index not in sample_num_dict:
             sample_num_dict[class_index] = 1
         elif sample_num_dict[class_index] == sample_num_each_cls:
@@ -94,7 +97,6 @@ def get_sample_std_file(sample_num_each_cls=5, directory = 'datas/dishes_dataset
     for i in range(len(sample_list)):
         line_list = re.split('_', copy_file_name_list[i])
         class_index = line_list[-1][:-4]
-        class_index = str(int(class_index) + 40)
         save_dir = os.path.join(save_dir_path, class_index)
         if not os.path.exists(save_dir):
             os.mkdir(save_dir)
@@ -102,7 +104,7 @@ def get_sample_std_file(sample_num_each_cls=5, directory = 'datas/dishes_dataset
         shutil.copyfile(sample_list[i], save_path)
 
 
-def rename_t_file():  # rename test file
+def rename_t_file():  # rename test file. no need any more.
     test_file_dir = 'datas/dishes_dataset/test'
     save_file_dir = 'datas/dishes_dataset/test_std'
     for i in os.listdir(test_file_dir):
@@ -134,7 +136,7 @@ def evaluate_single_file(file_path, feature_map, base_model):
     new_map = dict()
     for i in range(len(my_map)):
         new_map[str(my_map[i][0])] = i
-    # print(new_map)
+
     return new_map
 
 
@@ -154,22 +156,22 @@ def t(base_model, lst, sample_num_each_cls = 5, test_dir = 'datas/dishes_dataset
     first_num = dict()
 
     for i in lst:
+
         first_num[str(i)] = dict()
+        positive_num[str(i)] = 0
+        num_map[str(i)] = 0
+
         for j in lst:
             first_num[str(i)][str(j)] = 0
 
 
     t1 = time.time()
-    j = 0
+    j = 0  # no need
 
-    for cls_idx in lst:
-        cls_idx = str(cls_idx)
-        positive_num[cls_idx] = 0
-        num_map[cls_idx] = 0
 
     for i in test_file_name_list:
         file_path = os.path.join(test_dir, i)
-        cls_idx = re.split('_', file_path)[-1][:-4]
+        cls_idx = re.split('_', file_path)[-1][:-4]  # accroding to the directory name
 
         if int(cls_idx) not in lst:  # ugly code except the class we do not need in test
             continue
@@ -215,7 +217,7 @@ def t(base_model, lst, sample_num_each_cls = 5, test_dir = 'datas/dishes_dataset
     rate_dict = dict()
 
     for k, v in positive_num.items():
-        rate_dict[k] = v / (num_map[k] + 1e-12)
+        rate_dict[k] = v / (num_map[k] + 1e-12)  # to avoid 0
     # print(rate_dict)
     for k, v in rank_map.items():
         for cls_idx in v.keys():
@@ -254,7 +256,7 @@ def pickle_read(file_path):
 def get_text_result():  # just for a test temproraly
     base_dir = './'
 
-    class_num = ['14', '27', '40', '54']  # need to be modified accroding to the classes num.
+    class_num = ['46']  # need to be modified accroding to the classes num.
     sample_num = ['_5', '_10']  #  5 or 10 samples each class
     positive_map_str = 'positive_num_'
     num_map_str = 'num_map_'
@@ -302,16 +304,38 @@ def write_excel(new_all_map, file_name):
 
 
 def do_get_feature_and_t():
+    # lst_except = [4, 7, 14, 18, 21, 24, 26, 30]
     lst = [i for i in range(1, 55)]
-    lst.pop(27)
-    lst2 = [i for i in range(1, 41)]
-    lst2.pop(27)
-    lst_all = [lst, lst2]
+
+    lst_all = [lst]
     for i in lst_all:
         for j in [5, 10]:
             get_feature_map(base_model, i, j)
+            # print(len(a1['8']))
             t(base_model, i, j)  # rate_map records the accuracy, and the all_map records the average rank.
 
 
+def get_num_of_each_class_in_dir():
+    train_dir = 'datas/dishes_dataset/train'
+    file_list = os.listdir(train_dir)
+    num_dict = dict()
+    for i in range(41):
+        num_dict[str(i)] = 0
+    for file_name in file_list:
+        # file_path = os.path.join(train_dir, file_name)
+        line = re.split('_', file_name)
+        cls = line[-1][:-4]
+        num_dict[cls] += 1
+    return num_dict
+
+
 if __name__ == '__main__':
+    # do_get_feature_and_t()
+    # mapping_dict = pickle_read('evaluate_result/all_result/mapping_dict')
+    #
+    # the_dict = get_num_of_each_class_in_dir()
+    # print(json.dumps(the_dict, indent=4))
+    # get_sample_std_file(5)
+    # get_sample_std_file(10)
     do_get_feature_and_t()
+    pass

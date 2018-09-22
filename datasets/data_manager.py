@@ -11,7 +11,7 @@ class Tableware(object):
     def __init__(self, root, **kwargs):
         self.dataset_dir = root
         self.train_dir = osp.join(self.dataset_dir, 'train')
-        self.test_dir = osp.join(self.dataset_dir, 'test')
+        self.test_dir = osp.join(self.dataset_dir, 'test_std')
 
         self._check_before_run()
         # if training set label: {1, 12, 3, 4, 67, 8, 102}, it's necessary to relabel!

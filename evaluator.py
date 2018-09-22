@@ -12,21 +12,20 @@ class Evaluator(object):
         self.model = model
 
     def evaluate(self, data_loader, margin):
-        print(type(data_loader))
+
         count = 0.0
         summ = 0.0
         for i, inputs in enumerate(data_loader):
             imgs, pids = inputs
-            print('imgs:', imgs)
-            print('type of imgs:', type(imgs))
-            print('pids:', pids)
-            print('type of pids:', type(pids))
+            # print('imgs:', imgs)
+            # print('type of imgs:', type(imgs))
+            # print('pids:', pids)
+            # print('type of pids:', type(pids))
             data = imgs.cuda()
             with torch.no_grad():
                 feature = self.model(data)
             feature.cpu()
-            print(feature)
-            print(type(feature))
+
             distmat = loss.euclidean_dist(feature, feature).cpu()
             # print(distmat[0])
             # print(pids)
