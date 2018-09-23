@@ -156,6 +156,12 @@ def trainer(data_pth, a, b):
     model, optim_policy = get_baseline_model(model_path=pretrained_model)
     print('model size: {:.5f}M'.format(sum(p.numel()
                                            for p in model.parameters()) / 1e6))
+    inner_dist = 0
+    outer_dist = 0
+    max_outer = 0
+    min_outer = 0
+    max_iner = 0
+    min_iner = 0
 
     tri_criterion = TripletLoss(margin)
 
@@ -200,7 +206,7 @@ def trainer(data_pth, a, b):
         # skip if not save model
         if eval_step > 0 and (epoch + 1) % eval_step == 0 or (epoch + 1) == max_epoch:
             save_file_name = 'margin_'+ str(margin) + '_epoch_' + str(epoch + 1) + '.txt'
-            acc = evaluator.evaluate(testloader, test_margin, save_file_name)
+            acc, inner_dist, outer_dist, max_outer, min_outer, max_iner, min_iner = evaluator.evaluate(testloader, test_margin, save_file_name)
             is_best = acc > best_acc
             f.write('accuracy {:.1%}, achieved at epoch {}'.format(acc, epoch + 1))
             print('accuracy:{:.1%}'.format(acc))
@@ -221,7 +227,13 @@ def trainer(data_pth, a, b):
     print(
         'Best accuracy {:.1%}, achieved at epoch {}'.format(best_acc, best_epoch))
     f.close()
+    return inner_dist, outer_dist, max_outer, min_outer, max_iner, min_iner
 
 if __name__ == "__main__":
 
-    trainer('/home/ubuntu/Program/Tableware/reid_tableware/datas/dishes_dataset/', 3, 0)
+    for margin in range(1, 500):
+        f = open('margin_dist.txt', 'a')
+        inner_dist, outer_dist, max_outer, min_outer, max_iner, min_iner = trainer('/home/ubuntu/Program/Tableware/reid_tableware/datas/dishes_dataset/', margin, 0)
+        f.write("{},{},{},{},{},{},{}\r\n".format(margin,inner_dist,outer_dist, max_outer, min_outer, max_iner, min_iner))
+        print(margin, inner_dist, outer_dist)
+        f.close()

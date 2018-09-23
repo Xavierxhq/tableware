@@ -12,9 +12,18 @@ class Evaluator(object):
         self.model = model
 
     def evaluate(self, data_loader, margin, save_file_name):
-        f = open(save_file_name, 'w+')
-        count = 0.0
+        # f = open(save_file_name, 'w+')
+        count = 1
         summ = 0.0
+
+        inner_num = 0
+        inner_dist = 0
+        outer_num = 0
+        outer_dist = 0
+        max_dist_inner = 0
+        max_dist_outer = 0
+        min_dist_outer = 1000000
+        min_dist_inner = 1000000
         for i, inputs in enumerate(data_loader):
             imgs, pids = inputs
             data = imgs.cuda()
@@ -25,13 +34,24 @@ class Evaluator(object):
             distmat = loss.euclidean_dist(feature, feature).cpu()
             for i, label_i in enumerate(pids):
                 for j, label_j in enumerate(pids):
+                    if i == j:
+                        continue
+                        # f.write('{}, {} :{}\r\n'.format(label_i, label_j, distmat[i, j]))
+                    if label_i == label_j:
+                        inner_num += 1
+                        inner_dist += distmat[i, j]
+                        max_dist_inner = max(max_dist_inner, distmat[i, j])
+                        min_dist_inner = min(min_dist_inner, distmat[i, j])
+                    else:
+                        outer_num += 1
+                        outer_dist += distmat[i, j]
+                        max_dist_outer = max(max_dist_outer, distmat[i, j])
+                        min_dist_outer = min(min_dist_outer, distmat[i, j])
+                    # if distmat[i,j] <= margin and label_i == label_j:
+                    #     summ = summ + 1.0
+                    # elif distmat[i,j] > margin and label_i != label_j:
+                    #     summ = summ + 1.0
+                    # count = count + 1.0
 
-                    f.write('{}, {} :{}\r\n'.format(label_i, label_j, distmat[i, j]))
 
-                    if distmat[i,j] <= margin and label_i == label_j:
-                        summ = summ + 1.0
-                    elif distmat[i,j] > margin and label_i != label_j:
-                        summ = summ + 1.0
-                    count = count + 1.0
-        f.close()
-        return summ / count
+        return summ / count, inner_dist/inner_num, outer_dist/outer_num, max_dist_outer, min_dist_outer, max_dist_inner, min_dist_inner
