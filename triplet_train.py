@@ -20,6 +20,8 @@ from utils.loss import TripletLoss
 from utils.serialization import Logger
 from utils.serialization import save_checkpoint
 from utils.transforms import TrainTransform, TestTransform
+from t_evaluator import do_get_feature_and_t
+
 
 def triplet_example(input1, labels):
     labels_set = set(labels.numpy())
@@ -39,6 +41,7 @@ def triplet_example(input1, labels):
                 random_state.choice(list(labels_set - set([label])))])
         input3[i] = input1[n_idx]
     return input1, input2, input3
+
 
 def train(model, optimizer, criterion, epoch, print_freq, data_loader):
     model.train()
@@ -101,7 +104,7 @@ def trainer(data_pth, a, b):
 
     # optimization options
     optim = 'Adam'
-    max_epoch = 1
+    max_epoch = 5
     train_batch = 64
     test_batch = 64
     lr = 0.1
@@ -124,7 +127,7 @@ def trainer(data_pth, a, b):
     save_dir = 'model/pytorch-ckpt/'
     workers = 1
     start_epoch = 0
-    f = open('label_'+ str(margin) + '_.txt', 'w+')
+
 
     torch.manual_seed(seed)
     use_gpu = torch.cuda.is_available()
@@ -193,10 +196,8 @@ def trainer(data_pth, a, b):
     if use_gpu:
         model = nn.DataParallel(model).cuda()
 
-    evaluator = Evaluator(model)
-    # start training
-    best_acc = -np.inf
-    best_epoch = 0
+    # evaluator = Evaluator(model)
+
     for epoch in range(start_epoch, max_epoch):
         if step_size > 0:
             adjust_lr(optimizer, epoch + 1)
@@ -205,16 +206,12 @@ def trainer(data_pth, a, b):
 
         # skip if not save model
         if eval_step > 0 and (epoch + 1) % eval_step == 0 or (epoch + 1) == max_epoch:
-            save_file_name = 'margin_'+ str(margin) + '_epoch_' + str(epoch + 1) + '.txt'
-            acc, inner_dist, outer_dist, max_outer, min_outer, max_iner, min_iner = evaluator.evaluate(testloader, test_margin, save_file_name)
-            is_best = acc > best_acc
-            f.write('accuracy {:.1%}, achieved at epoch {}'.format(acc, epoch + 1))
-            print('accuracy:{:.1%}'.format(acc))
-            if is_best:
-                best_acc = acc
-                best_epoch = epoch + 1
-                print(
-                    'Best accuracy {:.1%}, achieved at epoch {}'.format(best_acc, best_epoch))
+            # save_model_path = 'margin_'+ str(margin) + '_epoch_' + str(epoch + 1) + '.txt'
+
+            # acc, inner_dist, outer_dist, max_outer, min_outer, max_iner, min_iner = evaluator.evaluate(testloader, test_margin, save_model_path)
+
+            is_best = True
+            save_model_path = 'margin({})_epoch({}).pth.tar'.format(margin, epoch+1)
             if use_gpu:
                 state_dict = model.module.state_dict()
             else:
@@ -222,18 +219,30 @@ def trainer(data_pth, a, b):
             save_checkpoint({
                 'state_dict': state_dict,
                 'epoch': epoch + 1,
-            }, is_best=is_best, save_dir=save_dir, filename=str(margin) + '_test_checkpoint_ep' + str(epoch + 1) + '.pth.tar')
+            }, is_best=is_best, save_dir=save_dir, filename=save_model_path)
+            # in this place, is_best is always True.
+            # so it will think that the newest model is also the best one.
 
-    print(
-        'Best accuracy {:.1%}, achieved at epoch {}'.format(best_acc, best_epoch))
-    f.close()
-    return inner_dist, outer_dist, max_outer, min_outer, max_iner, min_iner
+    # print(
+    #     'Best accuracy {:.1%}, achieved at epoch {}'.format(best_acc, best_epoch))
+    # f.close()
+            do_get_feature_and_t(os.path.join('model/pytorch-ckpt', '1_' + save_model_path), margin=margin, epoch=epoch+1)
+    return save_model_path, inner_dist, outer_dist, max_outer, min_outer, max_iner, min_iner
+
 
 if __name__ == "__main__":
 
-    for margin in range(1, 500):
-        f = open('margin_dist.txt', 'a')
-        inner_dist, outer_dist, max_outer, min_outer, max_iner, min_iner = trainer('/home/ubuntu/Program/Tableware/reid_tableware/datas/dishes_dataset/', margin, 0)
-        f.write("{},{},{},{},{},{},{}\r\n".format(margin,inner_dist,outer_dist, max_outer, min_outer, max_iner, min_iner))
-        print(margin, inner_dist, outer_dist)
-        f.close()
+    # for margin in range(1, 500):
+    #     f = open('margin_dist.txt', 'a')
+    #     inner_dist, outer_dist, max_outer, min_outer, max_iner, min_iner = trainer('/home/ubuntu/Program/Tableware/reid_tableware/datas/dishes_dataset/', margin, 0)
+    #     f.write("{},{},{},{},{},{},{}\r\n".format(margin,inner_dist,outer_dist, max_outer, min_outer, max_iner, min_iner))
+    #     print(margin, inner_dist, outer_dist)
+    #     f.close()
+    for margin in [5, 10, 20]:
+        trainer('/home/ubuntu/Program/Tableware/reid_tableware/datas/dishes_dataset/', margin, 0)
+    # _ = don't care.
+
+    # model_path = '1_margin(10)_epoch(1).pth.tar'
+
+
+    # it will cost you lots of time.
