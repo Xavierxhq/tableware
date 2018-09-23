@@ -101,7 +101,7 @@ def trainer(data_pth, a, b):
 
     # optimization options
     optim = 'Adam'
-    max_epoch = 10
+    max_epoch = 1
     train_batch = 64
     test_batch = 64
     lr = 0.1
@@ -124,6 +124,7 @@ def trainer(data_pth, a, b):
     save_dir = 'model/pytorch-ckpt/'
     workers = 1
     start_epoch = 0
+    f = open('label_'+ str(margin) + '_.txt', 'w+')
 
     torch.manual_seed(seed)
     use_gpu = torch.cuda.is_available()
@@ -198,15 +199,16 @@ def trainer(data_pth, a, b):
 
         # skip if not save model
         if eval_step > 0 and (epoch + 1) % eval_step == 0 or (epoch + 1) == max_epoch:
-            acc = evaluator.evaluate(testloader, test_margin)
+            save_file_name = 'margin_'+ str(margin) + '_epoch_' + str(epoch + 1) + '.txt'
+            acc = evaluator.evaluate(testloader, test_margin, save_file_name)
             is_best = acc > best_acc
+            f.write('accuracy {:.1%}, achieved at epoch {}'.format(acc, epoch + 1))
             print('accuracy:{:.1%}'.format(acc))
             if is_best:
                 best_acc = acc
                 best_epoch = epoch + 1
                 print(
                     'Best accuracy {:.1%}, achieved at epoch {}'.format(best_acc, best_epoch))
-
             if use_gpu:
                 state_dict = model.module.state_dict()
             else:
@@ -214,10 +216,12 @@ def trainer(data_pth, a, b):
             save_checkpoint({
                 'state_dict': state_dict,
                 'epoch': epoch + 1,
-            }, is_best=is_best, save_dir=save_dir, filename='test_checkpoint_ep' + str(epoch + 1) + '.pth.tar')
+            }, is_best=is_best, save_dir=save_dir, filename=str(margin) + '_test_checkpoint_ep' + str(epoch + 1) + '.pth.tar')
 
     print(
         'Best accuracy {:.1%}, achieved at epoch {}'.format(best_acc, best_epoch))
+    f.close()
 
 if __name__ == "__main__":
-    trainer('/home/ubuntu/Program/Tableware/reid_tableware/datas/dishes_dataset/',1, 14.5)
+
+    trainer('/home/ubuntu/Program/Tableware/reid_tableware/datas/dishes_dataset/', 3, 0)

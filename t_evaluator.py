@@ -253,56 +253,6 @@ def pickle_read(file_path):
         return None
 
 
-def get_text_result():  # just for a test temproraly
-    base_dir = './'
-
-    class_num = ['46']  # need to be modified accroding to the classes num.
-    sample_num = ['_5', '_10']  #  5 or 10 samples each class
-    positive_map_str = 'positive_num_'
-    num_map_str = 'num_map_'
-    all_map_str = 'all_map_'
-    for i in class_num:
-        for j in sample_num:
-            positive_map_name = positive_map_str + str(i) + str(j)
-            num_map_name = num_map_str + str(i) + str(j)
-            all_map_name = all_map_str + str(i) + str(j)
-            positive_map_path = os.path.join(base_dir, positive_map_name)
-            num_map_path = os.path.join(base_dir, num_map_name)
-            all_map_path = os.path.join(base_dir, all_map_name)
-            positive_map = pickle_read(positive_map_path)
-            num_map = pickle_read(num_map_path)
-            all_map = pickle_read(all_map_path)
-            result_dict = OrderedDict()
-            write_excel(all_map, 'result_' + str(i) + str(j) + '.xls')
-            for cls in range(55):  # read the class index in order to make the result in order.
-                cls_idx = str(cls)
-                if cls_idx in positive_map:
-                    result_dict[cls_idx] = positive_map[cls_idx] / num_map[cls_idx]
-                    f = open(i + j + '.txt', 'w+')
-                    f.write('accuracy:')
-                    f.write(json.dumps(result_dict, indent=4))
-                    f.write('average rank of each class')
-                    f.write(json.dumps(all_map, indent=4))
-                    f.close()
-
-
-def write_excel(new_all_map, file_name):
-    book = xlwt.Workbook()
-    sheet = book.add_sheet('Sheet1', cell_overwrite_ok=True)
-    row_index = 1
-    col_index = 1
-    for i in range(55):
-        if str(i) in new_all_map.keys():
-            for j in range(55):
-                if str(j) in new_all_map[str(i)]:
-                    sheet.write(row_index, col_index, new_all_map[str(i)][str(j)])
-                    col_index += 1
-            row_index += 1
-            col_index = 1
-    assert file_name[-4:] == '.xls'
-    book.save(file_name)
-
-
 def do_get_feature_and_t():
     # lst_except = [4, 7, 14, 18, 21, 24, 26, 30]
     lst = [i for i in range(1, 55)]
