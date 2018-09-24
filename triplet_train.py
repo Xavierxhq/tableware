@@ -93,7 +93,8 @@ def train(model, optimizer, criterion, epoch, print_freq, data_loader):
               'Lr {:.2e}'
               .format(epoch, batch_time.sum, losses.mean, param_group[0]['lr']))
     print()
-
+    if losses.val <1e-5:
+        return True
 
 def trainer(data_pth, a, b):
     seed = 0
@@ -104,7 +105,7 @@ def trainer(data_pth, a, b):
 
     # optimization options
     optim = 'Adam'
-    max_epoch = 5
+    max_epoch = 100
     train_batch = 64
     test_batch = 64
     lr = 0.1
@@ -196,19 +197,26 @@ def trainer(data_pth, a, b):
     if use_gpu:
         model = nn.DataParallel(model).cuda()
 
-    # evaluator = Evaluator(model)
+    evaluator = Evaluator(model)
 
     for epoch in range(start_epoch, max_epoch):
         if step_size > 0:
             adjust_lr(optimizer, epoch + 1)
-
-        train(model, optimizer, tri_criterion, epoch, print_freq, trainloader)
+        next_margin = margin
+        if train(model, optimizer, tri_criterion, epoch, print_freq, trainloader):
+            next_margin += 1
+        else:
+            next_margin -= 1
 
         # skip if not save model
         if eval_step > 0 and (epoch + 1) % eval_step == 0 or (epoch + 1) == max_epoch:
-            # save_model_path = 'margin_'+ str(margin) + '_epoch_' + str(epoch + 1) + '.txt'
+            save_record_path = 'margin_'+ str(margin) + '_epoch_' + str(epoch + 1) + '.txt'
 
-            # acc, inner_dist, outer_dist, max_outer, min_outer, max_iner, min_iner = evaluator.evaluate(testloader, test_margin, save_model_path)
+            acc, inner_dist, outer_dist, max_outer, min_outer, max_iner, min_iner = evaluator.evaluate(testloader, test_margin, save_record_path)
+            print('margin:{}, epoch:{}, acc:{}'.format(margin, epoch+1, acc))
+            f = open('record.txt', 'a')
+            f.write('margin:{}, epoch:{}, acc:{}\n'.format(margin, epoch+1, acc))
+            f.close()
 
             is_best = True
             save_model_path = 'margin({})_epoch({}).pth.tar'.format(margin, epoch+1)
@@ -226,7 +234,9 @@ def trainer(data_pth, a, b):
     # print(
     #     'Best accuracy {:.1%}, achieved at epoch {}'.format(best_acc, best_epoch))
     # f.close()
-            do_get_feature_and_t(os.path.join('model/pytorch-ckpt', '1_' + save_model_path), margin=margin, epoch=epoch+1)
+
+    #         do_get_feature_and_t(os.path.join('model/pytorch-ckpt', '1_' + save_model_path), margin=margin, epoch=epoch+1)
+            margin = next_margin
     return save_model_path, inner_dist, outer_dist, max_outer, min_outer, max_iner, min_iner
 
 
@@ -238,8 +248,8 @@ if __name__ == "__main__":
     #     f.write("{},{},{},{},{},{},{}\r\n".format(margin,inner_dist,outer_dist, max_outer, min_outer, max_iner, min_iner))
     #     print(margin, inner_dist, outer_dist)
     #     f.close()
-    for margin in [5, 10, 20]:
-        trainer('/home/ubuntu/Program/Tableware/reid_tableware/datas/dishes_dataset/', margin, 0)
+
+    trainer('/home/ubuntu/Program/Tableware/reid_tableware/datas/dishes_dataset/', 20, 0)
     # _ = don't care.
 
     # model_path = '1_margin(10)_epoch(1).pth.tar'
