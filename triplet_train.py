@@ -10,6 +10,7 @@ import time
 from torch import nn
 from torch.backends import cudnn
 from torch.utils.data import DataLoader
+import utils.loss as loss
 
 from datasets.data_manager import Tableware
 from datasets.data_loader import ImageData
@@ -23,12 +24,21 @@ from utils.transforms import TrainTransform, TestTransform
 from t_evaluator import do_get_feature_and_t
 
 
-def triplet_example(input1, labels):
+def triplet_example(input1, labels,distmat):
     labels_set = set(labels.numpy())
     label_to_indices = {label: np.where(labels.numpy() == label)[0] for label in labels_set}
     random_state = np.random.RandomState(29)
     input2 = torch.Tensor(input1.size())
     input3 = torch.Tensor(input1.size())
+
+    dis_mp, dis_mn, p_inds, n_inds = loss.hard_example_extream(distmat, labels, True)
+
+    for i, label in enumerate(labels.numpy()):
+        input2[i] = input1[int(p_inds[i])]
+        input3[i] = input1[int(n_inds[i])]
+    
+    
+    """
 
     for i, label in enumerate(labels.numpy()):
         p_idx = i
@@ -40,6 +50,8 @@ def triplet_example(input1, labels):
         n_idx = random_state.choice(label_to_indices[
                 random_state.choice(list(labels_set - set([label])))])
         input3[i] = input1[n_idx]
+    """
+
     return input1, input2, input3
 
 
@@ -49,6 +61,9 @@ def train(model, optimizer, criterion, epoch, print_freq, data_loader):
     data_time = AverageMeter()
     losses = AverageMeter()
     start = time.time()
+    evaluator = Evaluator(model)
+    distmat = evaluator.calDistmat(data_loader)
+    is_add_margin = False
 
     for i, inputs in enumerate(data_loader):
         data_time.update(time.time() - start)
@@ -57,7 +72,8 @@ def train(model, optimizer, criterion, epoch, print_freq, data_loader):
         # parse data
         imgs, pids = inputs
 
-        img1, img2, img3 = triplet_example(imgs, pids)
+        img1, img2, img3 = triplet_example(imgs, pids,distmat)
+ #       img1, img2, img3 = triplet_example(imgs, pids)
         input1 = img1.cuda()
         input2 = img2.cuda()
         input3 = img3.cuda()
@@ -88,13 +104,16 @@ def train(model, optimizer, criterion, epoch, print_freq, data_loader):
                               batch_time.val, batch_time.mean,
                               data_time.val, data_time.mean,
                               losses.val, losses.mean))
+        if losses.val <1e-5:
+            is_add_margin = True
+
     param_group = optimizer.param_groups
     print('Epoch: [{}]\tEpoch Time {:.3f} s\tLoss {:.6f}\t'
               'Lr {:.2e}'
               .format(epoch, batch_time.sum, losses.mean, param_group[0]['lr']))
     print()
-    if losses.val <1e-5:
-        return True
+    return is_add_margin
+
 
 def trainer(data_pth, a, b):
     seed = 0
@@ -203,15 +222,15 @@ def trainer(data_pth, a, b):
         if step_size > 0:
             adjust_lr(optimizer, epoch + 1)
         next_margin = margin
-        if train(model, optimizer, tri_criterion, epoch, print_freq, trainloader):
-            next_margin += 1
-        else:
-            next_margin -= 1
+
 
         # skip if not save model
         if eval_step > 0 and (epoch + 1) % eval_step == 0 or (epoch + 1) == max_epoch:
             save_record_path = 'margin_'+ str(margin) + '_epoch_' + str(epoch + 1) + '.txt'
-
+            _t1 =time.time()
+            train(model, optimizer, tri_criterion, epoch, print_freq, trainloader)
+            _t2 = time.time()
+            print(_t2 - _t1)
             acc, inner_dist, outer_dist, max_outer, min_outer, max_iner, min_iner = evaluator.evaluate(testloader, test_margin, save_record_path)
             print('margin:{}, epoch:{}, acc:{}'.format(margin, epoch+1, acc))
             f = open('record.txt', 'a')
@@ -219,11 +238,13 @@ def trainer(data_pth, a, b):
             f.close()
 
             is_best = True
-            save_model_path = 'margin({})_epoch({}).pth.tar'.format(margin, epoch+1)
+            save_model_path = 'new_margin({})_epoch({}).pth.tar'.format(margin, epoch+1)
             if use_gpu:
                 state_dict = model.module.state_dict()
             else:
                 state_dict = model.state_dict()
+
+
             save_checkpoint({
                 'state_dict': state_dict,
                 'epoch': epoch + 1,
@@ -249,7 +270,7 @@ if __name__ == "__main__":
     #     print(margin, inner_dist, outer_dist)
     #     f.close()
 
-    trainer('/home/ubuntu/Program/Tableware/reid_tableware/datas/dishes_dataset/', 20, 0)
+    trainer('/home/ubuntu/Program/Tableware/tableware/datas/dishes_dataset/', 20, 0)
     # _ = don't care.
 
     # model_path = '1_margin(10)_epoch(1).pth.tar'
