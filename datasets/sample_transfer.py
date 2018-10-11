@@ -60,7 +60,7 @@ if __name__ == "__main__":
                 break
         label += 1
 
-    save_dir = '/home/ubuntu/Program/Tableware/tableware/evaluate_result/all_result/'
+    save_dir = '../evaluate_result/all_result/'
 
     f = open(os.path.join(save_dir, 'mapping_dict'), 'wb+')
     pickle.dump(mapping_dict, f)
