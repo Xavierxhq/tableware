@@ -121,6 +121,7 @@ def evaluate_single_file_with_average_feature_map(file_path, feature_map, base_m
     result_dict = {}
     file_feature = get_feature(file_path, base_model)
     # print(file_feature)
+    # print(feature_map)
     for k, v in feature_map.items():
         if type(v) == dict:
             continue
@@ -128,7 +129,7 @@ def evaluate_single_file_with_average_feature_map(file_path, feature_map, base_m
         result_dict[k] = dist(file_feature, _feature)
 
     for k, v in result_dict.items():
-        result_dict[k] = np.asarray(v.detach().numpy())
+        # result_dict[k] = np.asarray(v.detach().numpy())
         for i in np.nditer(result_dict[k]):
             result_dict[k] = float(str(i))
 
@@ -143,10 +144,7 @@ def evaluate_single_file_with_average_feature_map(file_path, feature_map, base_m
     return new_map, rank_list
 
 
-def transform_feature_map_to_everage(feature_num_each_class=5, _range=55):
-    feature_map_path = 'evaluate_result/feature_map/margin(20)_epoch(1)_featureMap_54_5'
-    output_map_path = 'evaluate_result/feature_map/margin(20)_epoch(1)_featureMap_54_1'
-    origin_feature_map = pickle_read(feature_map_path)
+def transform_feature_map_to_everage(origin_feature_map, output_map_path = '', feature_num_each_class=5, _range=55):
     new_feature_map = init_dict(_range, _range, 0)
     lst = [i for i in range(_range)]
     for index in lst:
@@ -157,12 +155,12 @@ def transform_feature_map_to_everage(feature_num_each_class=5, _range=55):
                 _feature = _feature.detach().numpy()
                 _avg_feature += _feature
             _avg_feature /= feature_num_each_class
-            new_feature_map[index] = _avg_feature
+            new_feature_map[index] = torch.FloatTensor(_avg_feature)
     pickle_write(output_map_path, new_feature_map)
     return new_feature_map
 
 
-def get_feature_map(base_model, lst, sample_num_each_cls=5, margin=5, epoch=1, test_file_dir='datas/test_chawdoe/sample_data_', save_dir='evaluate_result/feature_map'):
+def get_feature_map_k(base_model, lst, sample_num_each_cls=5, margin=5, epoch=1, test_file_dir='datas/test_chawdoe/sample_data_', save_dir='evaluate_result/feature_map'):
     print('do get_feature_map')
     feature_map = dict()
     # lst is a list which includes class index as int array.
@@ -188,35 +186,33 @@ def get_feature_map(base_model, lst, sample_num_each_cls=5, margin=5, epoch=1, t
     print('feature map has been saved in ' + save_path)
     return feature_map
 
+def get_feature_map_average(base_model, lst, sample_num_each_cls=5, margin=5, epoch=1, test_file_dir='datas/test_chawdoe/sample_data_', save_dir='evaluate_result/feature_map'):
+    print('do get_feature_map')
+    feature_map = dict()
+    # lst is a list which includes class index as int array.
+    test_file_dir += str(sample_num_each_cls)
+    if not os.path.exists(test_file_dir):
+        print('You must use get sample_std_file() firstly')
+        return None
 
-def evaluate_single_file_with_average_feature_map(file_path, feature_map, base_model):
-    # file_path: single picture path
-    result_dict = {}
-    file_feature = get_feature(file_path, base_model)
-    # print(file_feature)
-    for k, v in feature_map.items():
-        if type(v) == dict:
-            continue
-        _feature = torch.FloatTensor(v)
-        result_dict[k] = dist(file_feature, _feature)
+    for i in lst:
+        ground_truth_label = str(i)
+        feature_map[ground_truth_label] = list()
+        dir_full_path = os.path.join(test_file_dir, ground_truth_label)  # open the directory in order.
+        dir_file_list = os.listdir(dir_full_path)
+        for file_name in dir_file_list:
+            file_full_path = os.path.join(dir_full_path, file_name)
+            if len(feature_map[ground_truth_label]) < sample_num_each_cls:
+                feature_map[ground_truth_label].append(get_feature(file_full_path, base_model))
 
-    for k, v in result_dict.items():
-        result_dict[k] = np.asarray(v.detach().numpy())
-        for i in np.nditer(result_dict[k]):
-            result_dict[k] = float(str(i))
-
-    my_map = sorted(result_dict.items(), key=lambda d: d[1])
-
-    new_map = dict()
-    rank_list = list()
-    for i in range(len(my_map)):
-        new_map[str(my_map[i][0])] = i
-        rank_list.append(str(my_map[i][0]))
-
-    return new_map, rank_list
+    save_file_name = 'margin({})_epoch({})_featureMap_{}_{}'.format(margin, epoch, len(lst), sample_num_each_cls)
+    save_path = os.path.join(save_dir, save_file_name)
+    new_feature = transform_feature_map_to_everage(feature_map, save_path, _range=96)
+    print('feature map has been saved in ' + save_path)
+    return new_feature
 
 
-def get_sample_std_file(sample_num_each_cls=5, directory='datas/dishes_dataset/test_std', save_dir_path='datas/test_chawdoe/sample_data_'):
+def get_sample_std_file(sample_num_each_cls=5, directory='datas/dishes_dataset/test_new_class', save_dir_path='datas/test_chawdoe/sample_data_'):
     # half complete. Usually only use once in your first training.
     save_dir_path += str(sample_num_each_cls)
     sample_list, copy_file_name_list, sample_num_dict = [], [], {}
@@ -427,15 +423,14 @@ def t_with_dish_minimum_average_distance(base_model, lst, sample_num_each_cls=5,
     return rate_dict, rank_map, positive_num, num_map
 
 
-def t_save_file(base_model, lst, sample_num_each_cls=5, margin=5, epoch=1, test_dir='datas/dishes_dataset/test_std', feature_dir='evaluate_result/feature_map'):  # test
+def t_save_file(feature_map, base_model, lst, sample_num_each_cls=5, margin=5, epoch=1, test_dir='datas/dishes_dataset/test_new_class', feature_dir='evaluate_result/feature_map'):  # test
 
     feature_map_name = 'margin({})_epoch({})_featureMap_{}_{}'.format(margin, epoch, len(lst), sample_num_each_cls)
 
-    feature_map = pickle_read(os.path.join(feature_dir, feature_map_name))
+    # feature_map = pickle_read(os.path.join(feature_dir, feature_map_name))
 
     # feature_map = transform_feature_map_to_everage(5, 55)
-
-
+    print(feature_map.keys())
     test_file_name_list = os.listdir(test_dir)
 
     rank_map = dict()
@@ -480,7 +475,7 @@ def t_save_file(base_model, lst, sample_num_each_cls=5, margin=5, epoch=1, test_
 
         num_map[str(cls_idx)] += 1  # compute all test num of the class
 
-    for i in range(1, 55):
+    for i in range(1, len(lst)):
         _key = str(i)
         if _key in positive_num.keys():
             _acc = positive_num[_key]/(num_map[_key]+1e-12)
@@ -531,15 +526,27 @@ def pickle_write(file_path, what_to_write):
         print('pickle write error: {}'.format(file_path))
 
 
+def get_accuracy_from_map(positive_num, num_map):
+    if type(positive_num) == str:
+        positive_num = pickle_read(positive_num)
+    if type(num_map) == str:
+        num_map = pickle_read(num_map)
+    all_positive_num = 0
+    all_num = 0
+    for key, value in positive_num.items():
+        all_positive_num += positive_num[key]
+        all_num += num_map[key]
+    return all_positive_num / (all_num + 1e-12)
+
 def do_get_feature_and_t(base_model, margin, epoch):
-    base_model.eval() # tell that is testing now, no need to BP
-    lst_all = [i for i in range(1, 55)]
+    lst_all = [i for i in range(1, 96)]
     lst = [lst_all]
     for i in lst:
-        for j in [5, 10]:  # choose 5, 10 samples as the database
-            get_feature_map(base_model, i, j, margin=margin, epoch=epoch)
-            _accuracy = t_with_dish_knn(base_model, i, j, margin=margin, epoch=epoch)
-            # _accuracy = t_with_dish(base_model, i, j, margin=margin, epoch=epoch)
+        for j in [5]:  # choose 5, 10 samples as the database
+            # get_feature_map_k(base_model, i, j, margin=margin, epoch=epoch)
+            feature_map = get_feature_map_average(base_model, i, j, margin=margin, epoch=epoch)
+            _, _, positive_num, num_map = t_save_file(feature_map, base_model, i, j, margin=margin, epoch=epoch, test_dir='datas/dishes_dataset/test_new_class')
+            _accuracy = get_accuracy_from_map(positive_num, num_map)
             print('Accuracy: {} under {} classes, {} samples/class'.format(_accuracy, len(i), j))
     return
 
@@ -547,6 +554,14 @@ def do_get_feature_and_t(base_model, margin, epoch):
 if __name__ == '__main__':
     # get_sample_std_file(5) # Do this to get 5 sample pictures for every class
     # get_sample_std_file(10) # Do this to get 10 sample pictures for every class.
-    model = load_model(model_path='model/1_margin(20)_epoch(1).pth.tar')
-    do_get_feature_and_t(model, margin=20, epoch=1)  # get feature map and test the model.
-    pass
+    # model = load_model(model_path='model/1_margin(20)_epoch(1).pth.tar')
+    # model.eval()
+    # tell that is testing now, no need to BP
+    # do_get_feature_and_t(model, margin=20, epoch=1)  # get feature map and test the model.
+    # print(get_accuracy_from_map('evaluate_result/all_result/margin(20)_epoch(1)_positive_num_95_5',
+    #                             'evaluate_result/all_result/margin(20)_epoch(1)_num_map_95_5'))
+    # pass
+    the_dict = pickle_read('evaluate_result/all_result/mapping_dict')
+    the_dict_1 = pickle_read('evaluate_result/all_result/mapping_dict')
+    for k in ['23', '41', '45', '48', '44', '52', '46']:
+        print(k, the_dict[k])
