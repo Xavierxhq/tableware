@@ -36,8 +36,8 @@ def triplet_example(input1, labels,distmat):
     for i, label in enumerate(labels.numpy()):
         input2[i] = input1[int(p_inds[i])]
         input3[i] = input1[int(n_inds[i])]
-    
-    
+
+
     """
 
     for i, label in enumerate(labels.numpy()):
@@ -124,7 +124,7 @@ def trainer(data_pth, a, b):
 
     # optimization options
     optim = 'Adam'
-    max_epoch = 100
+    max_epoch = 4
     train_batch = 64
     test_batch = 64
     lr = 0.1
@@ -140,6 +140,10 @@ def trainer(data_pth, a, b):
     # model options
     last_stride = 1
     pretrained_model = 'model/resnet50-19c8e357.pth'
+    pretrained_model_18 = 'model/resnet18-5c106cde.pth'
+    pretrained_model_34 = 'model/resnet34-333f7ec4.pth'
+    pretrained_model_101 = 'model/resnet101-5d3b4d8f.pth'
+    pretrained_model_152 = 'model/resnet152-b121ed2d.pth'
 
     # miscs
     print_freq = 20
@@ -176,9 +180,10 @@ def trainer(data_pth, a, b):
         pin_memory=pin_memory, drop_last=True
     )
 
-    model, optim_policy = get_baseline_model(model_path=pretrained_model)
-    print('model size: {:.5f}M'.format(sum(p.numel()
-                                           for p in model.parameters()) / 1e6))
+    # model, optim_policy = get_baseline_model(model_path=pretrained_model)
+    model, optim_policy = get_baseline_model(model_path=pretrained_model_18, layers=18)
+    # model, optim_policy = get_baseline_model(model_path=pretrained_model_101, layers=101)
+    print('model size: {:.5f} M'.format(sum(p.numel() for p in model.parameters()) / 1e6))
     inner_dist = 0
     outer_dist = 0
     max_outer = 0
@@ -231,14 +236,19 @@ def trainer(data_pth, a, b):
             train(model, optimizer, tri_criterion, epoch, print_freq, trainloader)
             _t2 = time.time()
             print(_t2 - _t1)
+
+            """
             acc, inner_dist, outer_dist, max_outer, min_outer, max_iner, min_iner = evaluator.evaluate(testloader, test_margin, save_record_path)
             print('margin:{}, epoch:{}, acc:{}'.format(margin, epoch+1, acc))
             f = open('record.txt', 'a')
             f.write('margin:{}, epoch:{}, acc:{}\n'.format(margin, epoch+1, acc))
             f.close()
+            """
 
             is_best = True
-            save_model_path = 'new_margin({})_epoch({}).pth.tar'.format(margin, epoch+1)
+            # save_model_path = 'new_margin({})_epoch({}).pth.tar'.format(margin, epoch+1)
+            save_model_path = 'layers18_margin{}_epoch{}.tar'.format(margin, epoch+1)
+            # save_model_path = 'layers101_margin{}_epoch{}.tar'.format(margin, epoch+1)
             if use_gpu:
                 state_dict = model.module.state_dict()
             else:

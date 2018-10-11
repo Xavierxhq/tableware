@@ -1,7 +1,7 @@
 # encoding: utf-8
 """
 @author:  liaoxingyu
-@contact: xyliao1993@qq.com 
+@contact: xyliao1993@qq.com
 """
 
 from __future__ import absolute_import
@@ -15,15 +15,25 @@ import torch.nn.functional as F
 from torch import nn
 
 from .resnet import ResNet
+from resnet import resnet18, resnet34, resnet101, resnet152
 
 
 
 class ResNetBuilder(nn.Module):
     in_planes = 2048
 
-    def __init__(self, last_stride=1, model_path='/DATA/model_zoo/resnet50-19c8e357.pth'):
+    def __init__(self, last_stride=1, model_path='/DATA/model_zoo/resnet50-19c8e357.pth', layers=50):
         super().__init__()
-        self.base = ResNet(last_stride)
+        if layers == 50:
+            self.base = ResNet(last_stride)
+        if layers == 18:
+            self.base = resnet18(last_stride=last_stride)
+        if layers == 34:
+            self.base = resnet34(last_stride=last_stride)
+        if layers == 101:
+            self.base = resnet101(last_stride=last_stride)
+        if layers == 152:
+            self.base = resnet152(last_stride=last_stride)
         self.base.load_param(model_path)
 
 

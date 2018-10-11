@@ -65,8 +65,7 @@ class ResNet(nn.Module):
         self.layer1 = self._make_layer(block, 64, layers[0])
         self.layer2 = self._make_layer(block, 128, layers[1], stride=2)
         self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
-        self.layer4 = self._make_layer(
-            block, 512, layers[3], stride=last_stride)
+        self.layer4 = self._make_layer(block, 512, layers[3], stride=last_stride)
 
     def _make_layer(self, block, planes, blocks, stride=1):
         downsample = None
@@ -112,6 +111,26 @@ class ResNet(nn.Module):
             elif isinstance(m, nn.BatchNorm2d):
                 m.weight.data.fill_(1)
                 m.bias.data.zero_()
+
+
+def resnet18(last_stride=2):
+    model = ResNet(last_stride=last_stride, layers=[2, 2, 2, 2])
+    return model
+
+
+def resnet34(last_stride=2):
+    model = ResNet(last_stride=last_stride, layers=[3, 4, 6, 3])
+    return model
+
+
+def resnet101(last_stride=2):
+    model = ResNet(blast_stride=last_stride layers=[3, 4, 23, 3])
+    return model
+
+
+def resnet152(last_stride=2):
+    model = ResNet(blast_stride=last_stride layers=[3, 8, 36, 3])
+    return model
 
 
 if __name__ == "__main__":

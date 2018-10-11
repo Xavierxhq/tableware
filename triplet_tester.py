@@ -187,7 +187,7 @@ def get_feature_map_k(base_model, lst, sample_num_each_cls=5, margin=5, epoch=1,
     return feature_map
 
 def get_feature_map_average(base_model, lst, sample_num_each_cls=5, margin=5, epoch=1, test_file_dir='datas/test_chawdoe/sample_data_', save_dir='evaluate_result/feature_map'):
-    print('do get_feature_map')
+    # print('do get_feature_map')
     feature_map = dict()
     # lst is a list which includes class index as int array.
     test_file_dir += str(sample_num_each_cls)
@@ -208,7 +208,7 @@ def get_feature_map_average(base_model, lst, sample_num_each_cls=5, margin=5, ep
     save_file_name = 'margin({})_epoch({})_featureMap_{}_{}'.format(margin, epoch, len(lst), sample_num_each_cls)
     save_path = os.path.join(save_dir, save_file_name)
     new_feature = transform_feature_map_to_everage(feature_map, save_path, _range=96)
-    print('feature map has been saved in ' + save_path)
+    print('feature map of avg has been saved in ' + save_path)
     return new_feature
 
 
@@ -552,16 +552,18 @@ def do_get_feature_and_t(base_model, margin, epoch):
 
 
 if __name__ == '__main__':
-    # get_sample_std_file(5) # Do this to get 5 sample pictures for every class
+    get_sample_std_file(5) # Do this to get 5 sample pictures for every class
     # get_sample_std_file(10) # Do this to get 10 sample pictures for every class.
-    # model = load_model(model_path='model/1_margin(20)_epoch(1).pth.tar')
-    # model.eval()
-    # tell that is testing now, no need to BP
-    # do_get_feature_and_t(model, margin=20, epoch=1)  # get feature map and test the model.
+    model = load_model(model_path='model/1_margin(20)_epoch(1).pth.tar')
+    model.eval() # tell that is testing now, no need to BP
+    do_get_feature_and_t(model, margin=20, epoch=1)  # get feature map and test the model.
     # print(get_accuracy_from_map('evaluate_result/all_result/margin(20)_epoch(1)_positive_num_95_5',
     #                             'evaluate_result/all_result/margin(20)_epoch(1)_num_map_95_5'))
     # pass
+
+    """
     the_dict = pickle_read('evaluate_result/all_result/mapping_dict')
     the_dict_1 = pickle_read('evaluate_result/all_result/mapping_dict')
     for k in ['23', '41', '45', '48', '44', '52', '46']:
         print(k, the_dict[k])
+    """

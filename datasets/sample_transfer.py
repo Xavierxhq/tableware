@@ -13,11 +13,11 @@ if __name__ == "__main__":
     class_list = os.listdir(rootdir)
     each_class_train_num = 300
     each_class_test_num = 200
-    train_class_limit = 41
-    test_class_list = [i for i in range(0, 54)]
+    train_class_limit = 54
 
     # should be careful because the index is [0, 53]
     # but the class is [1, 54]
+    test_class_list = [i for i in range(0, 54)]
 
     # prepare training data
     index = 10000
