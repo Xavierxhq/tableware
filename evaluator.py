@@ -11,6 +11,16 @@ class Evaluator(object):
     def __init__(self, model):
         self.model = model
 
+    def calDistmat(self, data_loader):
+        for i, inputs in enumerate(data_loader):
+            imgs, pids = inputs
+            data = imgs.cuda()
+            with torch.no_grad():
+                feature = self.model(data)
+            feature.cpu()
+            distmat = loss.euclidean_dist(feature, feature).cpu()
+        return distmat
+
     def evaluate(self, data_loader, margin, save_file_name):
         # f = open(save_file_name, 'w+')
         count = 1

@@ -49,6 +49,11 @@ class Tableware(object):
 
     def _process_dir(self, dir_path, relabel=False):
         img_paths = glob.glob(osp.join(dir_path, '*.png'))
+
+        # target_classes = [str(i) for i in range(55)]
+        # img_paths = [x for x in img_paths if x.split('/')[-1].split('.')[0].split('_')[-1] in target_classes]
+        # print('length of img_paths:', len(img_paths))
+
         pattern = re.compile(r'([\d]+)_([\d]+)')
 
         pid_container = set()

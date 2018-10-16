@@ -21,10 +21,17 @@ from utils.loss import TripletLoss
 from utils.serialization import Logger
 from utils.serialization import save_checkpoint
 from utils.transforms import TrainTransform, TestTransform
-from t_evaluator import do_get_feature_and_t
 
 
-def triplet_example(input1, labels,distmat):
+def load_model(base_model, model_path):
+    model_parameter = torch.load(model_path)
+    base_model.load_state_dict(model_parameter['state_dict'])
+    base_model = base_model.cuda()
+    print('model', model_path.split('/')[-1], 'loaded.')
+    return base_model
+
+
+def triplet_example(input1, labels, distmat):
     labels_set = set(labels.numpy())
     label_to_indices = {label: np.where(labels.numpy() == label)[0] for label in labels_set}
     random_state = np.random.RandomState(29)
@@ -72,8 +79,8 @@ def train(model, optimizer, criterion, epoch, print_freq, data_loader):
         # parse data
         imgs, pids = inputs
 
-        img1, img2, img3 = triplet_example(imgs, pids,distmat)
- #       img1, img2, img3 = triplet_example(imgs, pids)
+        img1, img2, img3 = triplet_example(imgs, pids, distmat)
+        # img1, img2, img3 = triplet_example(imgs, pids)
         input1 = img1.cuda()
         input2 = img2.cuda()
         input3 = img3.cuda()
@@ -124,7 +131,7 @@ def trainer(data_pth, a, b):
 
     # optimization options
     optim = 'Adam'
-    max_epoch = 4
+    max_epoch = 150
     train_batch = 64
     test_batch = 64
     lr = 0.1
@@ -150,7 +157,7 @@ def trainer(data_pth, a, b):
     eval_step = 1
     save_dir = 'model/pytorch-ckpt/'
     workers = 1
-    start_epoch = 0
+    start_epoch = 88
 
 
     torch.manual_seed(seed)
@@ -181,9 +188,12 @@ def trainer(data_pth, a, b):
     )
 
     # model, optim_policy = get_baseline_model(model_path=pretrained_model)
-    model, optim_policy = get_baseline_model(model_path=pretrained_model_18, layers=18)
+    model, optim_policy = get_baseline_model(layers=18)
+    # model, optim_policy = get_baseline_model(model_path=pretrained_model_18, layers=18)
+    # model, optim_policy = get_baseline_model(model_path=pretrained_model_34, layers=34)
     # model, optim_policy = get_baseline_model(model_path=pretrained_model_101, layers=101)
-    print('model size: {:.5f} M'.format(sum(p.numel() for p in model.parameters()) / 1e6))
+    model = load_model(model, model_path='./model/pytorch-ckpt/87_layers18_margin20_epoch87.tar')
+    print('model\'s parameters size: {:.5f} M'.format(sum(p.numel() for p in model.parameters()) / 1e6))
     inner_dist = 0
     outer_dist = 0
     max_outer = 0
@@ -235,7 +245,7 @@ def trainer(data_pth, a, b):
             _t1 =time.time()
             train(model, optimizer, tri_criterion, epoch, print_freq, trainloader)
             _t2 = time.time()
-            print(_t2 - _t1)
+            print('time for training:', '%.2f' % (_t2 - _t1), 's')
 
             """
             acc, inner_dist, outer_dist, max_outer, min_outer, max_iner, min_iner = evaluator.evaluate(testloader, test_margin, save_record_path)
@@ -248,6 +258,7 @@ def trainer(data_pth, a, b):
             is_best = True
             # save_model_path = 'new_margin({})_epoch({}).pth.tar'.format(margin, epoch+1)
             save_model_path = 'layers18_margin{}_epoch{}.tar'.format(margin, epoch+1)
+            # save_model_path = 'layers34_margin{}_epoch{}.tar'.format(margin, epoch+1)
             # save_model_path = 'layers101_margin{}_epoch{}.tar'.format(margin, epoch+1)
             if use_gpu:
                 state_dict = model.module.state_dict()

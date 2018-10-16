@@ -1,12 +1,18 @@
-import os
+import os, shutil, pickle
 import cv2
-import pickle
 
 
 if __name__ == "__main__":
     rootdir = "/home/ubuntu/Program/Tableware/data/2018043000/样本/样本"
     train_save_dir = "../datas/dishes_dataset/train/"
     test_save_dir = "../datas/dishes_dataset/test_std/"
+    if os.path.exists(train_save_dir):
+        shutil.rmtree(train_save_dir)
+    os.makedirs(train_save_dir)
+    if os.path.exists(test_save_dir):
+        shutil.rmtree(test_save_dir)
+    os.makedirs(test_save_dir)
+
     mapping_dict = dict()
     train_num_dict = dict()
     test_num_dict = dict()
