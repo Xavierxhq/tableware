@@ -3,9 +3,9 @@ import cv2
 
 
 if __name__ == "__main__":
-    rootdir = "/home/ubuntu/Program/Tableware/data/2018043000/样本/样本"
-    train_save_dir = "../datas/dishes_dataset/train/"
-    test_save_dir = "../datas/dishes_dataset/test_std/"
+    rootdir = "/home/ubuntu/Program/Tableware/data/2018043000/sample/sample"
+    train_save_dir = "../train_data/"
+    test_save_dir = "../test_data/"
     if os.path.exists(train_save_dir):
         shutil.rmtree(train_save_dir)
     os.makedirs(train_save_dir)
@@ -19,7 +19,7 @@ if __name__ == "__main__":
     class_list = os.listdir(rootdir)
     each_class_train_num = 300
     each_class_test_num = 200
-    train_class_limit = 54
+    train_class_limit = 41
 
     # should be careful because the index is [0, 53]
     # but the class is [1, 54]
@@ -67,20 +67,13 @@ if __name__ == "__main__":
         label += 1
 
     save_dir = '../evaluate_result/all_result/'
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
 
-    f = open(os.path.join(save_dir, 'mapping_dict'), 'wb+')
+    f = open(os.path.join(save_dir, 'train_mapping_dict.pkl'), 'wb+')
     pickle.dump(mapping_dict, f)
     f.close()
 
-    f = open(os.path.join(save_dir, 'test_num_dict'), 'wb+')
+    f = open(os.path.join(save_dir, 'test_num_dict.pkl'), 'wb+')
     pickle.dump(test_num_dict, f)
     f.close()
-
-
-
-
-
-
-
-
-

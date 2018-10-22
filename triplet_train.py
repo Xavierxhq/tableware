@@ -122,7 +122,7 @@ def train(model, optimizer, criterion, epoch, print_freq, data_loader):
     return is_add_margin
 
 
-def trainer(data_pth, a, b):
+def trainer(data_pth, a, b, _time=0, layers=18):
     seed = 0
 
     # dataset options
@@ -131,7 +131,7 @@ def trainer(data_pth, a, b):
 
     # optimization options
     optim = 'Adam'
-    max_epoch = 150
+    max_epoch = 4
     train_batch = 64
     test_batch = 64
     lr = 0.1
@@ -146,8 +146,8 @@ def trainer(data_pth, a, b):
 
     # model options
     last_stride = 1
-    pretrained_model = 'model/resnet50-19c8e357.pth'
     pretrained_model_18 = 'model/resnet18-5c106cde.pth'
+    pretrained_model_50 = 'model/resnet50-19c8e357.pth'
     pretrained_model_34 = 'model/resnet34-333f7ec4.pth'
     pretrained_model_101 = 'model/resnet101-5d3b4d8f.pth'
     pretrained_model_152 = 'model/resnet152-b121ed2d.pth'
@@ -155,9 +155,9 @@ def trainer(data_pth, a, b):
     # miscs
     print_freq = 20
     eval_step = 1
-    save_dir = 'model/pytorch-ckpt/'
+    save_dir = 'model/pytorch-ckpt/time%d' % _time
     workers = 1
-    start_epoch = 88
+    start_epoch = 0
 
 
     torch.manual_seed(seed)
@@ -176,23 +176,25 @@ def trainer(data_pth, a, b):
 
     trainloader = DataLoader(
         ImageData(dataset.train, TrainTransform(height, width)),
-
         batch_size=train_batch, num_workers=workers,
         pin_memory=pin_memory, drop_last=True
     )
 
-    testloader = DataLoader(
-        ImageData(dataset.test, TestTransform(height, width)),
-        batch_size=test_batch, num_workers=workers,
-        pin_memory=pin_memory, drop_last=True
-    )
+    # testloader = DataLoader(
+    #     ImageData(dataset.test, TestTransform(height, width)),
+    #     batch_size=test_batch, num_workers=workers,
+    #     pin_memory=pin_memory, drop_last=True
+    # )
 
     # model, optim_policy = get_baseline_model(model_path=pretrained_model)
-    model, optim_policy = get_baseline_model(layers=18)
+    if layers == 18:
+        model, optim_policy = get_baseline_model(model_path=pretrained_model_18, layers=18)
+    else:
+        model, optim_policy = get_baseline_model(model_path=pretrained_model_50, layers=50)
     # model, optim_policy = get_baseline_model(model_path=pretrained_model_18, layers=18)
     # model, optim_policy = get_baseline_model(model_path=pretrained_model_34, layers=34)
     # model, optim_policy = get_baseline_model(model_path=pretrained_model_101, layers=101)
-    model = load_model(model, model_path='./model/pytorch-ckpt/87_layers18_margin20_epoch87.tar')
+    # model = load_model(model, model_path='./model/pytorch-ckpt/87_layers18_margin20_epoch87.tar')
     print('model\'s parameters size: {:.5f} M'.format(sum(p.numel() for p in model.parameters()) / 1e6))
     inner_dist = 0
     outer_dist = 0
@@ -255,9 +257,9 @@ def trainer(data_pth, a, b):
             f.close()
             """
 
-            is_best = True
+            is_best = False
             # save_model_path = 'new_margin({})_epoch({}).pth.tar'.format(margin, epoch+1)
-            save_model_path = 'layers18_margin{}_epoch{}.tar'.format(margin, epoch+1)
+            save_model_path = 'time{}_layers{}_margin{}_epoch{}.tar'.format(_time, layers, margin, epoch+1)
             # save_model_path = 'layers34_margin{}_epoch{}.tar'.format(margin, epoch+1)
             # save_model_path = 'layers101_margin{}_epoch{}.tar'.format(margin, epoch+1)
             if use_gpu:
@@ -291,7 +293,9 @@ if __name__ == "__main__":
     #     print(margin, inner_dist, outer_dist)
     #     f.close()
 
-    trainer('/home/ubuntu/Program/Tableware/tableware/datas/dishes_dataset/', 20, 0)
+    for _i in range(3):
+        trainer('./train_data/', 20, 0, _time=_i+1, layers=18)
+        trainer('./train_data/', 20, 0, _time=_i+1, layers=50)
     # _ = don't care.
 
     # model_path = '1_margin(10)_epoch(1).pth.tar'
