@@ -1,4 +1,4 @@
-import os
+import os, random
 import sys
 from os import path as osp
 from pprint import pprint
@@ -22,6 +22,8 @@ from utils.serialization import Logger
 from utils.serialization import save_checkpoint
 from utils.transforms import TrainTransform, TestTransform
 
+from triplet_tester import get_feature, pickle_read, pickle_write, write_feature_map, dist, do_get_feature_and_t
+
 
 def load_model(base_model, model_path):
     model_parameter = torch.load(model_path)
@@ -44,25 +46,98 @@ def triplet_example(input1, labels, distmat):
         input2[i] = input1[int(p_inds[i])]
         input3[i] = input1[int(n_inds[i])]
 
-
-    """
-
-    for i, label in enumerate(labels.numpy()):
-        p_idx = i
-        while p_idx == i:
-            if len(label_to_indices[label]) == 1:
-                break
-            p_idx = random_state.choice(label_to_indices[label])
-        input2[i] = input1[p_idx]
-        n_idx = random_state.choice(label_to_indices[
-                random_state.choice(list(labels_set - set([label])))])
-        input3[i] = input1[n_idx]
-    """
-
     return input1, input2, input3
 
 
-def train(model, optimizer, criterion, epoch, print_freq, data_loader):
+def compute_center_with_label(model, label, data_pth):
+    # model.eval()
+    temp_name = './evaluate_result/feature_map/%f.pkl' % time.time()
+    processed_imgs = [data_pth + x for x in os.listdir(data_pth) if x.split('.')[0].split('_')[-1] == str(label)]
+    for img_path in processed_imgs:
+        f = get_feature(img_path, model)
+        _store_features_temp(temp_name, str(label), f)
+    obj = pickle_read(temp_name)
+
+    _avg_feature = None
+    for _f in obj[str(label)]:
+        if _avg_feature is None:
+            _avg_feature = _f
+        else:
+            _avg_feature = _f.add(_avg_feature)
+    _avg_feature /= len(obj[str(label)])
+
+    min_dis, max_dis = 1e6, -1
+    for _f in obj[str(label)]:
+        _d = dist(_avg_feature, _f)
+        if _d > max_dis:
+            max_dis = _d
+            _max_feature = _f
+        if _d < min_dis:
+            min_dis = _d
+            _min_feature = _f
+
+    os.remove(temp_name)
+    return _avg_feature, _max_feature, _min_feature
+
+
+def _store_features_temp(feature_map_name, label, feature):
+    if os.path.exists(feature_map_name):
+        obj = pickle_read(feature_map_name)
+        obj[label].append(feature)
+    else:
+        obj = {
+            label: [feature]
+        }
+    pickle_write(feature_map_name, obj)
+
+
+def _get_avg_feature_for_labels(model, labels, data_pth):
+    prefix = '%f' % time.time()
+    _labels = set(labels)
+    for label in _labels:
+        _avg_feature, _max_feature, _min_feature = compute_center_with_label(model, label, data_pth)
+        write_feature_map('./evaluate_result/feature_map/%s.center.pkl' % prefix, str(label - 1), _avg_feature)
+        write_feature_map('./evaluate_result/feature_map/%s.furthest_from_center.pkl' % prefix, str(label - 1), _max_feature)
+        write_feature_map('./evaluate_result/feature_map/%s.near_to_center.pkl' % prefix, str(label - 1), _min_feature)
+    return prefix
+
+
+def get_center_anchor(labels, prefix):
+    inputs = []
+    obj = pickle_read('./evaluate_result/feature_map/%s.center.pkl' % prefix)
+    for label in labels:
+        # if str(label) not in obj:
+        #     print(label, 'center is not computed. exit')
+        #     exit(500)
+        inputs.append(obj[(str(label))])
+    return inputs
+
+
+def get_furthest_from_center(labels, prefix):
+    inputs = []
+    obj = pickle_read('./evaluate_result/feature_map/%s.furthest_from_center.pkl' % prefix)
+    for label in labels:
+        inputs.append(obj[(str(label))])
+    return inputs
+
+
+def get_nearest_to_center(labels, prefix):
+    inputs = []
+    obj = pickle_read('./evaluate_result/feature_map/%s.near_to_center.pkl' % prefix)
+    for label in labels:
+        inputs.append(obj[(str(label))])
+    return inputs
+
+
+def clean_cache(prefix):
+    if prefix is None:
+        return
+    os.remove('./evaluate_result/feature_map/%s.center.pkl' % prefix)
+    os.remove('./evaluate_result/feature_map/%s.furthest_from_center.pkl' % prefix)
+    os.remove('./evaluate_result/feature_map/%s.near_to_center.pkl' % prefix)
+
+
+def train(model, optimizer, criterion, epoch, print_freq, data_loader, data_pth):
     model.train()
     batch_time = AverageMeter()
     data_time = AverageMeter()
@@ -72,23 +147,46 @@ def train(model, optimizer, criterion, epoch, print_freq, data_loader):
     distmat = evaluator.calDistmat(data_loader)
     is_add_margin = False
 
+    # _t1 = time.time()
+    # _get_avg_feature_for_labels(model, [x for x in range(1, 41)], data_pth)
+    # print('time for getting center: %.1f s' % (time.time() - _t1))
+
+    # model.train()
+    prefix = None
     for i, inputs in enumerate(data_loader):
         data_time.update(time.time() - start)
 
         # model optimizer
         # parse data
         imgs, pids = inputs
+        labels = [x.item() for x in pids]
+
+        if i % 1 == 0:
+            # clean_cache(prefix)
+            _t1 = time.time()
+            prefix = _get_avg_feature_for_labels(model, [x for x in range(1, 41)], data_pth)
+            # print('time for getting center: %.1f s' % (time.time() - _t1), i)
 
         img1, img2, img3 = triplet_example(imgs, pids, distmat)
-        # img1, img2, img3 = triplet_example(imgs, pids)
-        input1 = img1.cuda()
-        input2 = img2.cuda()
+        # input1 = img1.cuda()
+        input1 = get_center_anchor(labels, prefix)
+        feat1 = torch.stack(input1)
+        # print(input1)
+        if random.randint(1, 10) > 5:
+            input2 = get_furthest_from_center(labels, prefix)
+            # input2 = get_nearest_to_center(labels, prefix)
+            feat2 = torch.stack(input2)
+        else:
+            feat2 = img2.cuda()
+            feat2 = model(feat2)
         input3 = img3.cuda()
 
         # forward
-        feat1 = model(input1)
-        feat2 = model(input2)
+        # feat1 = model(input1)
+        # feat2 = model(input2)
         feat3 = model(input3)
+        # print(feat1)
+        # print(feat3)
 
         loss = criterion(feat1, feat2, feat3)
 
@@ -111,7 +209,7 @@ def train(model, optimizer, criterion, epoch, print_freq, data_loader):
                               batch_time.val, batch_time.mean,
                               data_time.val, data_time.mean,
                               losses.val, losses.mean))
-        if losses.val <1e-5:
+        if losses.val < 1e-5:
             is_add_margin = True
 
     param_group = optimizer.param_groups
@@ -131,7 +229,7 @@ def trainer(data_pth, a, b, _time=0, layers=18):
 
     # optimization options
     optim = 'Adam'
-    max_epoch = 4
+    max_epoch = 20
     train_batch = 64
     test_batch = 64
     lr = 0.1
@@ -245,7 +343,7 @@ def trainer(data_pth, a, b, _time=0, layers=18):
         if eval_step > 0 and (epoch + 1) % eval_step == 0 or (epoch + 1) == max_epoch:
             save_record_path = 'margin_'+ str(margin) + '_epoch_' + str(epoch + 1) + '.txt'
             _t1 =time.time()
-            train(model, optimizer, tri_criterion, epoch, print_freq, trainloader)
+            train(model, optimizer, tri_criterion, epoch, print_freq, trainloader, data_pth=data_pth)
             _t2 = time.time()
             print('time for training:', '%.2f' % (_t2 - _t1), 's')
 
@@ -272,14 +370,10 @@ def trainer(data_pth, a, b, _time=0, layers=18):
                 'state_dict': state_dict,
                 'epoch': epoch + 1,
             }, is_best=is_best, save_dir=save_dir, filename=save_model_path)
-            # in this place, is_best is always True.
-            # so it will think that the newest model is also the best one.
+            
+            model.eval()
+            acc = do_get_feature_and_t(model, margin=20, epoch=1)
 
-    # print(
-    #     'Best accuracy {:.1%}, achieved at epoch {}'.format(best_acc, best_epoch))
-    # f.close()
-
-    #         do_get_feature_and_t(os.path.join('model/pytorch-ckpt', '1_' + save_model_path), margin=margin, epoch=epoch+1)
             margin = next_margin
     return save_model_path, inner_dist, outer_dist, max_outer, min_outer, max_iner, min_iner
 
@@ -293,9 +387,9 @@ if __name__ == "__main__":
     #     print(margin, inner_dist, outer_dist)
     #     f.close()
 
-    for _i in range(3):
-        trainer('./train_data/', 20, 0, _time=_i+1, layers=18)
-        trainer('./train_data/', 20, 0, _time=_i+1, layers=50)
+    for _i in range(1):
+        # trainer(data_pth, 20, 0, _time=_i+1, layers=18)
+        trainer('/home/ubuntu/Program/xhq/dataset/temp/train_data/', 20, 0, _time=_i, layers=50)
     # _ = don't care.
 
     # model_path = '1_margin(10)_epoch(1).pth.tar'

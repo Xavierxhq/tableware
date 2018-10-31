@@ -7,7 +7,6 @@ from os import path as osp
 
 class Tableware(object):
 
-
     def __init__(self, root, **kwargs):
         self.dataset_dir = root
         self.train_dir = self.dataset_dir
@@ -55,18 +54,23 @@ class Tableware(object):
         # img_paths = [x for x in img_paths if x.split('/')[-1].split('.')[0].split('_')[-1] in target_classes]
         # print('length of img_paths:', len(img_paths))
 
-        pattern = re.compile(r'([\d]+)_([\d]+)')
+        # pattern = re.compile(r'([\d]+)_([\d]+)')
 
         pid_container = set()
         for img_path in img_paths:
-            _, pid = map(int, pattern.search(img_path).groups())
+            # _, pid = map(int, pattern.search(img_path).groups())
+            pid = int( img_path.split('/')[-1].split('.')[0].split('_')[-1] )
             if pid == -1: continue  # junk images are just ignored
+            if pid == 0:
+                print(img_path)
+                continue
             pid_container.add(pid)
         pid2label = {pid: label for label, pid in enumerate(pid_container)}
 
         dataset = []
         for img_path in img_paths:
-            _, pid= map(int, pattern.search(img_path).groups())
+            # _, pid= map(int, pattern.search(img_path).groups())
+            pid = int( img_path.split('/')[-1].split('.')[0].split('_')[-1] )
             if pid == -1:
                 continue  # junk images are just ignored
             if relabel: pid = pid2label[pid]
