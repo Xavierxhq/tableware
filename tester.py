@@ -344,13 +344,14 @@ def get_accuracy_from_map(positive_num, num_map):
     print('time for get_accuracy_from_map:', '%.1f' % (time.time() - start_time), 's')
     return all_positive_num / (all_num + 1e-12)
 
-def do_get_feature_and_t(base_model, margin, epoch):
+def evaluate_model(model, margin, epoch):
+    model.eval()
     lst_all = [i for i in range(1, 55)]
     lst = [lst_all]
     for i in lst:
         for j in [5]:  # choose 5, 10 samples as the database
-            feature_map = get_feature_map_average(base_model, i, j, margin=margin, epoch=epoch)
-            _, _, positive_num, num_map = t_save_file(feature_map, base_model, i, j, margin=margin, epoch=epoch)
+            feature_map = get_feature_map_average(model, i, j, margin=margin, epoch=epoch)
+            _, _, positive_num, num_map = t_save_file(feature_map, model, i, j, margin=margin, epoch=epoch)
             _accuracy = get_accuracy_from_map(positive_num, num_map)
             print('Accuracy: {} under {} classes, {} samples/class'.format(_accuracy, len(i), j))
     return _accuracy
@@ -359,6 +360,5 @@ def do_get_feature_and_t(base_model, margin, epoch):
 if __name__ == '__main__':
     get_sample_std_file(5) # Do this to get 5 sample pictures for every class
 
-    model = load_model(model_path='./model/pytorch-ckpt/time2/time2_layers50_margin20_epoch1.tar', layers=50)
-    model.eval() # tell that is testing now, no need to BP
-    acc = do_get_feature_and_t(model, margin=20, epoch=1)
+    # model = load_model(model_path='./model/pytorch-ckpt/time2/time2_layers50_margin20_epoch1.tar', layers=50)
+    # acc = evaluate_model(model, margin=20, epoch=1)

@@ -1,21 +1,16 @@
 import os, random, sys, time
+import torch
 from os import path as osp
 from pprint import pprint
 import numpy as np
-import torch
 from torch import nn
 from torch.backends import cudnn
-from torch.utils.data import DataLoader
 import utils.loss as loss
-from datasets.data_manager import Tableware
-from datasets.data_loader import ImageData
 from models import get_baseline_model
 from utils.meters import AverageMeter
 from utils.loss import TripletLoss
-from utils.serialization import Logger
 from utils.serialization import save_checkpoint
-from utils.transforms import TrainTransform, TestTransform
-from tester import get_feature, pickle_read, pickle_write, dist, do_get_feature_and_t
+from tester import get_feature, pickle_read, pickle_write, dist, evaluate_model
 
 
 def load_model(base_model, model_path):
@@ -27,10 +22,10 @@ def load_model(base_model, model_path):
 
 
 def _compute_center_with_label(model, label, data_pth, sample_count):
-    # model.eval()
     temp_name = './evaluate_result/feature_map/%f.pkl' % time.time()
     processed_imgs = [data_pth + x for x in os.listdir(data_pth) if x.split('.')[0].split('_')[-1] == str(label)]
     random.shuffle(processed_imgs)
+    # use sample_count*4 pictures to get the center
     for img_path in processed_imgs[:sample_count*4]:
         f = get_feature(img_path, model)
         _store_features_temp(temp_name, str(label), f)
@@ -42,6 +37,7 @@ def _compute_center_with_label(model, label, data_pth, sample_count):
             _avg_feature = _f
         else:
             _avg_feature = _f.add(_avg_feature)
+    # get the center
     _avg_feature /= len(obj[str(label)])
 
     dist_dict = {}
@@ -49,10 +45,16 @@ def _compute_center_with_label(model, label, data_pth, sample_count):
         _d = dist(_avg_feature, _f)
         dist_dict[str(_i)] = _d
     dist_dict = sorted(dist_dict.items(), key=lambda d: d[1])
+    # for index, _d in dist_dict:
+    #     print(index, _d)
+    # exit(1000)
 
+    _avg_feature = obj[str(label)][int(dist_dict[0][0])]
     _max_feature_ls, _min_feature_ls = [], []
-    for index, _d in dist_dict[:sample_count]:
+    # the feature with smalleset distances
+    for index, _d in dist_dict[1:sample_count+1]:
         _min_feature_ls.append(obj[str(label)][int(index)])
+    # those with largest distances
     for index, _d in dist_dict[-1*sample_count:]:
         _max_feature_ls.append(obj[str(label)][int(index)])
 
@@ -77,6 +79,12 @@ def _get_negative_feature(model, label, data_pth):
     return get_feature(all_nagative_imgs[0], model)
 
 
+def _get_positive_feature(model, label, data_pth):
+    all_positive_imgs = [data_pth + x for x in os.listdir(data_pth) if x.split('.')[0].split('_')[-1] == str(label)]
+    random.shuffle(all_positive_imgs)
+    return get_feature(all_positive_imgs[0], model)
+
+
 def _get_input_samples(model, labels, data_pth, sample_count=64):
     if sample_count % len(labels) != 0:
         print('sample_count should times the count of labels')
@@ -88,37 +96,42 @@ def _get_input_samples(model, labels, data_pth, sample_count=64):
         _avg_feature, _max_feature_ls, _min_feature_ls = _compute_center_with_label(model, label, data_pth, sample_count=sample_count_for_one_label)
         for i in range(len(_max_feature_ls)):
             anchors.append(_avg_feature)
-            positives.append(_max_feature_ls[i])
-            # positives.append(_min_feature_ls[i])
+            if random.randint(1, 10) > 50:
+                positives.append(_max_feature_ls[i])
+                # positives.append(_min_feature_ls[i])
+            else :
+                positives.append(_get_positive_feature(model, label, data_pth))
             negatives.append(_get_negative_feature(model, label, data_pth))
     return anchors, positives, negatives
 
 
 def train(model, optimizer, criterion, epoch, print_freq, data_loader, data_pth):
-    model.train()
+    # model.train()
     losses = AverageMeter()
     is_add_margin = False
     labels_count_in_one_batch = 8
     labels_count_for_all = 40
+    iteration_count = 40
 
     start = time.time()
-    for _j in range(20):
+    for _j in range(iteration_count):
         for i in range(int(labels_count_for_all / labels_count_in_one_batch)):
             start_label = i * labels_count_in_one_batch + 1
+            model.eval()
             feat1, feat2, feat3 = _get_input_samples(model, [x for x in range(start_label, start_label + labels_count_in_one_batch)], data_pth)
 
-            loss = criterion(feat1, feat2, feat3)
-
+            model.train()
+            loss = criterion(torch.stack(feat1), torch.stack(feat2), torch.stack(feat3))
             optimizer.zero_grad()
             # backward
             loss.backward()
             optimizer.step()
             losses.update(loss.item())
 
-            if (_j * int(labels_count_for_all / labels_count_in_one_batch) + 1) % print_freq == 0:
+            if (_j * int(labels_count_for_all / labels_count_in_one_batch) + i + 1) % print_freq == 0:
                 print('Epoch: [{}][{}/{}]\t'
                         'Loss {:.6f} ({:.6f})\t'
-                          .format(epoch, _j * int(labels_count_for_all / labels_count_in_one_batch) + 1, 20 * int(labels_count_for_all / labels_count_in_one_batch),
+                          .format(epoch, _j * int(labels_count_for_all / labels_count_in_one_batch) + i + 1, iteration_count * int(labels_count_for_all / labels_count_in_one_batch),
                                   losses.val, losses.mean))
             if losses.val < 1e-5:
                 is_add_margin = True
@@ -127,7 +140,6 @@ def train(model, optimizer, criterion, epoch, print_freq, data_loader, data_pth)
     print('Epoch: [{}]\tEpoch Time {:.1f} s\tLoss {:.6f}\t'
               'Lr {:.2e}'
               .format(epoch, (time.time() - start), losses.mean, param_group[0]['lr']))
-    print()
     return is_add_margin
 
 
@@ -157,7 +169,7 @@ def trainer(data_pth, a, b, _time=0, layers=18):
     pretrained_model_101 = 'model/resnet101-5d3b4d8f.pth'
     pretrained_model_152 = 'model/resnet152-b121ed2d.pth'
     # miscs
-    print_freq = 20
+    print_freq = 10
     eval_step = 1
     save_dir = 'model/pytorch-ckpt/time%d' % _time
     workers = 1
@@ -222,25 +234,24 @@ def trainer(data_pth, a, b, _time=0, layers=18):
         # skip if not save model
         if eval_step > 0 and (epoch + 1) % eval_step == 0 or (epoch + 1) == max_epoch:
             _t1 =time.time()
-            train(model, optimizer, tri_criterion, epoch, print_freq, None, data_pth=data_pth)
+            train(model, optimizer, tri_criterion, epoch + 1, print_freq, None, data_pth=data_pth)
             _t2 = time.time()
             print('time for training:', '%.2f' % (_t2 - _t1), 's')
 
-            if use_gpu:
-                state_dict = model.module.state_dict()
-            else:
-                state_dict = model.state_dict()
-
-            save_model_name = 'layers{}_margin{}_epoch{}.tar'.format(layers, margin, epoch+1)
-            save_checkpoint({
-                'state_dict': state_dict,
-                'epoch': epoch + 1,
-            }, is_best=False, save_dir=save_dir, filename=save_model_name)
-
-            model.eval()
-            acc = do_get_feature_and_t(model, margin=20, epoch=1)
+            acc = evaluate_model(model, margin=20, epoch=1)
             if acc > max_acc:
-                print('max acc:', acc, ', epoch:', epoch + 1)
+                max_acc = acc
+                print('max acc:', max_acc, ', epoch:', epoch + 1)
+                if use_gpu:
+                    state_dict = model.module.state_dict()
+                else:
+                    state_dict = model.state_dict()
+
+                save_model_name = 'layers{}_margin{}_epoch{}.tar'.format(layers, margin, epoch+1)
+                save_checkpoint({
+                    'state_dict': state_dict,
+                    'epoch': epoch + 1,
+                }, is_best=False, save_dir=save_dir, filename=save_model_name)
 
             margin = next_margin
     return save_model_name
